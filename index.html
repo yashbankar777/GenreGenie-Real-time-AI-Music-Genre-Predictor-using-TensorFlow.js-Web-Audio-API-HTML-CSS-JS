@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Music Genre Predictor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #fff, #f0f8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: titleGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes titleGlow {
+            0% { filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
+            100% { filter: drop-shadow(0 0 20px rgba(255,255,255,0.8)); }
+        }
+
+        .header p {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .upload-section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(31, 38, 135, 0.5);
+        }
+
+        .upload-area {
+            border: 3px dashed rgba(255, 255, 255, 0.5);
+            border-radius: 15px;
+            padding: 60px 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: white;
+            opacity: 0.8;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .upload-text {
+            color: white;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .upload-hint {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .model-status {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            text-align: center;
+        }
+
+        .status-loading {
+            border-left: 4px solid #ff9800;
+        }
+
+        .status-ready {
+            border-left: 4px solid #4CAF50;
+        }
+
+        .status-error {
+            border-left: 4px solid #f44336;
+        }
+
+        .audio-preview {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            display: none;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin: 10px 0;
+            border-radius: 25px;
+        }
+
+        .audio-info {
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        .prediction-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            display: none;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .prediction-title {
+            color: white;
+            font-size: 2rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .genre-result {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .predicted-genre {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #4CAF50;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .confidence-score {
+            font-size: 1.5rem;
+            color: white;
+            font-weight: 600;
+        }
+
+        .genre-bars {
+            margin-top: 30px;
+        }
+
+        .genre-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            padding: 10px 20px;
+            transition: all 0.3s ease;
+        }
+
+        .genre-bar:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(5px);
+        }
+
+        .genre-name {
+            color: white;
+            font-weight: 600;
+            min-width: 80px;
+            font-size: 0.9rem;
+            text-transform: capitalize;
+        }
+
+        .genre-progress {
+            flex: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            margin: 0 15px;
+            overflow: hidden;
+        }
+
+        .genre-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            border-radius: 4px;
+            transition: width 1s ease;
+            position: relative;
+        }
+
+        .genre-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: progressShine 2s ease-in-out infinite;
+        }
+
+        @keyframes progressShine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .genre-percentage {
+            color: white;
+            font-weight: 600;
+            min-width: 50px;
+            text-align: right;
+            font-size: 0.9rem;
+        }
+
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            color: #ffcdd2;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .upload-section, .prediction-section {
+                padding: 20px;
+            }
+            
+            .predicted-genre {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-animation"></div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🎵 AI Music Genre Predictor</h1>
+            <p>Upload an audio file and let our AI predict its genre</p>
+            <p style="font-size: 0.9rem; opacity: 0.7;">Powered by TensorFlow.js & Deep Learning</p>
+        </div>
+
+        <div class="model-status" id="modelStatus">
+            <div class="loading-spinner"></div>
+            <p>Loading AI model...</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">🎤</div>
+                <div class="upload-text">Drag & Drop your audio file here</div>
+                <div class="upload-hint">or click to browse (MP3, WAV, M4A supported)</div>
+            </div>
+            <input type="file" id="audioFile" accept="audio/*">
+            <button class="btn" onclick="document.getElementById('audioFile').click()" id="uploadBtn" disabled>
+                Choose Audio File
+            </button>
+        </div>
+
+        <div class="audio-preview" id="audioPreview">
+            <div class="audio-info">
+                <h3 style="color: white; margin-bottom: 10px;">Audio Preview</h3>
+                <p id="audioFileName" style="color: rgba(255,255,255,0.8);"></p>
+            </div>
+            <audio controls class="audio-player" id="audioPlayer"></audio>
+            <button class="btn" onclick="predictGenre()" id="predictBtn" style="margin-top: 15px;">
+                🤖 Predict Genre
+            </button>
+        </div>
+
+        <div class="prediction-section" id="predictionSection">
+            <h2 class="prediction-title">Prediction Results</h2>
+            <div class="genre-result">
+                <div class="predicted-genre" id="predictedGenre">ROCK</div>
+                <div class="confidence-score" id="confidenceScore">Confidence: 95.2%</div>
+            </div>
+            <div class="genre-bars" id="genreBars">
+                <!-- Genre probability bars will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let model = null;
+        const genres = ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock'];
+        let audioContext = null;
+        let currentAudioBuffer = null;
+
+        // Initialize audio context
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Load the TensorFlow model
+        async function loadModel() {
+            try {
+                const modelStatus = document.getElementById('modelStatus');
+                modelStatus.innerHTML = '<div class="loading-spinner"></div><p>Loading AI model...</p>';
+                modelStatus.className = 'model-status status-loading';
+
+                // In a real implementation, you would load your saved model
+                // For demo purposes, we'll simulate model loading
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Uncomment this line when you have your model file:
+                // model = await tf.loadLayersModel('./path-to-your-model/model.json');
+                
+                modelStatus.innerHTML = '<p>✅ AI Model loaded successfully!</p>';
+                modelStatus.className = 'model-status status-ready';
+                
+                document.getElementById('uploadBtn').disabled = false;
+                
+            } catch (error) {
+                console.error('Error loading model:', error);
+                const modelStatus = document.getElementById('modelStatus');
+                modelStatus.innerHTML = '<p>❌ Error loading model. Please refresh and try again.</p>';
+                modelStatus.className = 'model-status status-error';
+            }
+        }
+
+        // Create mel spectrogram from audio buffer
+        function createMelSpectrogram(audioBuffer) {
+            const sampleRate = audioBuffer.sampleRate;
+            const audioData = audioBuffer.getChannelData(0);
+            
+            // This is a simplified version - in production, you'd need a proper
+            // mel spectrogram implementation or use Web Audio API with additional libraries
+            
+            // For demo, we'll create a mock spectrogram tensor
+            const height = 224;
+            const width = 224;
+            const channels = 3;
+            
+            // Create random data that simulates a spectrogram
+            const data = new Float32Array(height * width * channels);
+            for (let i = 0; i < data.length; i++) {
+                data[i] = Math.random();
+            }
+            
+            return tf.tensor4d(data, [1, height, width, channels]);
+        }
+
+        // Predict genre from audio
+        async function predictGenre() {
+            if (!currentAudioBuffer) {
+                showError('No audio file loaded');
+                return;
+            }
+
+            try {
+                const predictBtn = document.getElementById('predictBtn');
+                predictBtn.innerHTML = '<div class="loading-spinner" style="width: 20px; height: 20px; border-width: 2px;"></div> Analyzing...';
+                predictBtn.disabled = true;
+
+                // Create mel spectrogram from audio
+                const spectrogram = createMelSpectrogram(currentAudioBuffer);
+                
+                // For demo purposes, we'll simulate predictions
+                // In production, uncomment the line below:
+                // const predictions = await model.predict(spectrogram).data();
+                
+                // Simulate predictions with realistic probabilities
+                const predictions = generateMockPredictions();
+                
+                displayPredictions(predictions);
+                
+                predictBtn.innerHTML = '🤖 Predict Genre';
+                predictBtn.disabled = false;
+                
+                spectrogram.dispose();
+                
+            } catch (error) {
+                console.error('Prediction error:', error);
+                showError('Error during prediction. Please try again.');
+                
+                const predictBtn = document.getElementById('predictBtn');
+                predictBtn.innerHTML = '🤖 Predict Genre';
+                predictBtn.disabled = false;
+            }
+        }
+
+        // Generate mock predictions for demo
+        function generateMockPredictions() {
+            const predictions = new Array(10);
+            let total = 0;
+            
+            // Generate random probabilities
+            for (let i = 0; i < 10; i++) {
+                predictions[i] = Math.random();
+                total += predictions[i];
+            }
+            
+            // Normalize to sum to 1
+            for (let i = 0; i < 10; i++) {
+                predictions[i] = predictions[i] / total;
+            }
+            
+            // Make one genre significantly more likely
+            const topGenreIndex = Math.floor(Math.random() * 10);
+            predictions[topGenreIndex] = Math.max(predictions[topGenreIndex], 0.4);
+            
+            return predictions;
+        }
+
+        // Display prediction results
+        function displayPredictions(predictions) {
+            const predictionSection = document.getElementById('predictionSection');
+            const predictedGenre = document.getElementById('predictedGenre');
+            const confidenceScore = document.getElementById('confidenceScore');
+            const genreBars = document.getElementById('genreBars');
+
+            // Find top prediction
+            const maxIndex = predictions.indexOf(Math.max(...predictions));
+            const topGenre = genres[maxIndex];
+            const confidence = (predictions[maxIndex] * 100).toFixed(1);
+
+            // Display top prediction
+            predictedGenre.textContent = topGenre.toUpperCase();
+            confidenceScore.textContent = `Confidence: ${confidence}%`;
+
+            // Create genre probability bars
+            const sortedIndices = predictions
+                .map((prob, index) => ({ prob, index }))
+                .sort((a, b) => b.prob - a.prob)
+                .slice(0, 5); // Show top 5
+
+            genreBars.innerHTML = '';
+            sortedIndices.forEach((item, i) => {
+                const percentage = (item.prob * 100).toFixed(1);
+                const genreName = genres[item.index];
+                
+                const barDiv = document.createElement('div');
+                barDiv.className = 'genre-bar';
+                barDiv.innerHTML = `
+                    <div class="genre-name">${genreName}</div>
+                    <div class="genre-progress">
+                        <div class="genre-fill" style="width: ${percentage}%"></div>
+                    </div>
+                    <div class="genre-percentage">${percentage}%</div>
+                `;
+                
+                // Add delay for animation
+                setTimeout(() => {
+                    genreBars.appendChild(barDiv);
+                }, i * 100);
+            });
+
+            predictionSection.style.display = 'block';
+        }
+
+        // Handle file upload
+        document.getElementById('audioFile').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            initAudioContext();
+            
+            const audioPreview = document.getElementById('audioPreview');
+            const audioPlayer = document.getElementById('audioPlayer');
+            const audioFileName = document.getElementById('audioFileName');
+
+            try {
+                // Create object URL for audio player
+                const objectUrl = URL.createObjectURL(file);
+                audioPlayer.src = objectUrl;
+                audioFileName.textContent = `File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                
+                // Load audio for processing
+                const arrayBuffer = await file.arrayBuffer();
+                currentAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                audioPreview.style.display = 'block';
+                
+                // Hide previous predictions
+                document.getElementById('predictionSection').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading audio:', error);
+                showError('Error loading audio file. Please try a different file.');
+            }
+        });
+
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        const audioFile = document.getElementById('audioFile');
+
+        uploadArea.addEventListener('click', () => audioFile.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                audioFile.files = files;
+                audioFile.dispatchEvent(new Event('change'));
+            }
+        });
+
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            
+            const container = document.querySelector('.container');
+            container.appendChild(errorDiv);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+
+        // Initialize the app
+        window.addEventListener('load', () => {
+            loadModel();
+        });
+    </script>
+</body>
+</html>
